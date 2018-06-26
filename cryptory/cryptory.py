@@ -1,9 +1,9 @@
 # python 2
 try:
-    from urllib.request import Request, urlopen  
+    from urllib.request import Request, urlopen
 # Python 3
 except ImportError:
-    from urllib2 import Request, urlopen
+    from urllib2 import Request, urlopen, URLError
 
 import pandas as pd
 import time
@@ -77,12 +77,9 @@ class Cryptory():
             metric_name = 'total-subscribers'
         else:
             metric_name = metric
-        try: 
-            parsed_page = urlopen(url, timeout=self.timeout).read()
-            parsed_page = parsed_page.decode("utf8")
-        except:
-            # future versions may split out the different exceptions (e.g. timeout)
-            raise
+        
+        parsed_page = self.fetch_url(url)
+
         if metric == 'rankData':
             start_segment = parsed_page.find(metric)
         else:
@@ -111,7 +108,7 @@ class Cryptory():
             output = output.rename(columns={'subscriber_count': metric.replace("-","_")})
         return output
         
-    def extract_coinmarketcap(self, coin, coin_col=False):
+    def extract_coinmarketcap(self, coin=None, symbol=None, coin_col=False):
         """Retrieve basic historical information for a specific cryptocurrency from coinmarketcap.com
         
         Parameters
@@ -124,6 +121,14 @@ class Cryptory():
         -------
         pandas Dataframe
         """
+
+        # Check input parameters - coin or symbol is required.
+        if not coin and not symbol:
+            raise Exception('Please specify "coin" or "symbol" parameters.')
+
+        if symbol:
+            coin = self.get_coin_name(symbol)
+
         try:
             output = pd.read_html("https://coinmarketcap.com/currencies/{}/historical-data/?start={}&end={}".format(
                 coin, self.from_date.replace("-", ""), self.to_date.replace("-", "")))[0]
@@ -139,7 +144,32 @@ class Cryptory():
         if coin_col:
             output['coin'] = coin
         return output
-    
+
+    def get_coin_name(self, symbol):
+        """
+        Fetches coin name (ripple) based on symbol (XRP).
+
+        :param str symbol: Coin symbol.
+        :return: Coin name.
+        :rtype: str|None
+        :raise Exception: In case no coresponding cryptocurrency has been found.
+        """
+
+        response = self.fetch_url("https://api.coinmarketcap.com/v1/ticker/?limit=0")
+
+        # Parse response as JSON.
+        try:
+            coins = json.loads(response)
+        except:
+            raise Exception("Couldn't parse our JSON while retrieving coin name.")
+
+        # Walk thru all coins and compare symbols.
+        for c in coins:
+            if c["symbol"] == symbol.upper():
+                return c["id"]
+
+        raise Exception("Couldn't retrieve coin name based on {} symbol.".format(symbol))
+
     def extract_bitinfocharts(self, coin, metric="price", coin_col=False, metric_col=False):
         """Retrieve historical data for a specific cyrptocurrency scraped from bitinfocharts.com
         
@@ -168,15 +198,14 @@ class Cryptory():
                          'tweets', 'activeaddresses', 'top100cap']:
             raise ValueError("Not a valid bitinfocharts metric")
         new_col_name = "_".join([coin, metric])
-        parsed_page = Request("https://bitinfocharts.com/comparison/{}-{}.html".format(metric, coin),
-                            headers = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11'})
-        try: 
-            parsed_page = urlopen(parsed_page, timeout=self.timeout).read()
-            parsed_page = parsed_page.decode("utf8")
-        except:
-            # future versions may split out the different exceptions (e.g. timeout)
-            raise
+        parsed_page = self.fetch_url(Request(
+            "https://bitinfocharts.com/comparison/{}-{}.html".format(metric, coin),
+            headers={
+                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11'
+            }
+        ))
         start_segment = parsed_page.find("new Dygraph")
+
         if start_segment != -1:
             start_list = parsed_page.find('[[', start_segment)
             end_list = parsed_page.find(']]', start_list)
@@ -224,13 +253,12 @@ class Cryptory():
         from_date = int(time.mktime(time.strptime(self.from_date, "%Y-%m-%d")))
         to_date = int(time.mktime(time.strptime(self.to_date, "%Y-%m-%d")))
         url = "https://poloniex.com/public?command=returnChartData&currencyPair={}_{}&start={}&end={}&period=86400".format(
-                coin1.upper(), coin2.upper(), from_date, to_date)
-        try: 
-            parsed_page = urlopen(url, timeout=self.timeout).read()
-            parsed_page = parsed_page.decode("utf8")
-        except:
-            # future versions may split out the different exceptions (e.g. timeout)
-            raise
+            coin1.upper(),
+            coin2.upper(),
+            from_date,
+            to_date
+        )
+        parsed_page = self.fetch_url(url)
         output = json.loads(parsed_page)
         if isinstance(output, dict):
             if 'error' in list(output.keys()):
@@ -267,13 +295,11 @@ class Cryptory():
         n_days = (datetime.date.today() - 
                   datetime.datetime.strptime(self.from_date, "%Y-%m-%d").date()).days + 1
         url = "https://www.indexmundi.com/xrates/graph.aspx?c1={}&c2={}&days={}".format(
-            from_currency, to_currency, n_days)
-        try: 
-            parsed_page = urlopen(url, timeout=self.timeout).read()
-            parsed_page = parsed_page.decode("utf8")
-        except:
-            # future versions may split out the different exceptions (e.g. timeout)
-            raise
+            from_currency,
+            to_currency,
+            n_days
+        )
+        parsed_page = self.fetch_url(url)
         start_segment = parsed_page.find("chart xAxisName")
         if start_segment != -1:
             start_list = parsed_page.find("<", start_segment)
@@ -325,13 +351,11 @@ class Cryptory():
         # this site works off unix time (86400 seconds = 1 day)
         to_date = int(time.mktime(time.strptime(self.to_date, "%Y-%m-%d"))) + 86400
         url = "https://finance.yahoo.com/quote/{}/history?period1={}&period2={}&interval=1d&filter=history&frequency=1d".format(
-        market, from_date,  to_date)
-        try: 
-            parsed_page = urlopen(url, timeout=1).read()
-            parsed_page = parsed_page.decode("utf8")
-        except:
-            # future versions may split out the different exceptions (e.g. timeout)
-            raise
+            market,
+            from_date,
+            to_date
+        )
+        parsed_page = self.fetch_url(url)
         start_segment = parsed_page.find('{\"prices\":')
         if start_segment != -1:
             start_list = parsed_page.find("[", start_segment)
@@ -368,14 +392,7 @@ class Cryptory():
         If you get timeout errors, then increase the timeout argument when
         you initalise the cryptory class
         """
-        try: 
-            parsed_page = urlopen("https://www.eia.gov/dnav/pet/hist/LeafHandler.ashx?n=PET&s=RWTC&f=D",
-                                          timeout=self.timeout).read()
-            parsed_page = parsed_page.decode("utf8")
-        except:
-            # future versions may split out the different exceptions (e.g. timeout)
-            #return pd.DataFrame({"error":e}, index=[0])
-            raise
+        parsed_page = self.fetch_url("https://www.eia.gov/dnav/pet/hist/LeafHandler.ashx?n=PET&s=RWTC&f=D")
         souped_page = BeautifulSoup(parsed_page, 'html.parser')
         souped_values = [soups.text for soups in souped_page.findAll("td", {"class": "B3"})]
         souped_dates = [datetime.datetime.strptime(
@@ -542,6 +559,28 @@ class Cryptory():
         output = output.sort_values('date', ascending=self.ascending).reset_index(drop=True)
         return output
 
+    def fetch_url(self, url):
+        """
+        Fetches URL content from the internet and decodes it.
+
+        :param str url: URL to be fetched.
+        :return: Downloaded content.
+        :rtype: str
+        :raises Exception: In case of wrong response or when the response cannot be decoded.
+        :raises IOError,URLError: In case of problem with connection.
+        """
+
+        try:
+            response = urlopen(url, timeout=self.timeout).read()
+
+            return response.decode("utf8")
+
+        except (IOError, URLError) as e:
+            # TODO: ...
+            raise
+
+        except ValueError:
+            raise Exception("Response from URL {} was malformed. Response was:\n{}".format(url, response))
     
     def _merge_fill_filter(self, other_df):
         output = pd.merge(self._df, other_df, on="date", how="left")
