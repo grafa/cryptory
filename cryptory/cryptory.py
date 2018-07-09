@@ -1,6 +1,7 @@
 # python 2
 try:
     from urllib.request import Request, urlopen
+    from urllib.error import URLError
 # Python 3
 except ImportError:
     from urllib2 import Request, urlopen, URLError
@@ -15,11 +16,11 @@ from bs4 import BeautifulSoup
 from pytrends.request import TrendReq
 
 class Cryptory():
-    
-    def __init__(self, from_date, to_date=None, ascending=False, 
+
+    def __init__(self, from_date, to_date=None, ascending=False,
                  fillgaps=True, timeout=10.0):
         """Initialise cryptory class
-        
+
         Parameters
         ----------
         from_date : the starting date (as string) for the returned data;
@@ -28,7 +29,7 @@ class Cryptory():
             required format is %Y-%m-%d (e.g. "2017-06-21")
             Optional. If unspecified, it will default to the current day
         to_date : binary. Determines whether the returned dataframes are
-            ordered by date in ascending or descending order 
+            ordered by date in ascending or descending order
             (defaults to False i.e. most recent first)
         fillgaps : binary. When data does not exist (e.g. weekends for stocks)
             should the rows be filled in with the previous available data
@@ -36,7 +37,7 @@ class Cryptory():
         fillgaps : float. The max time allowed (in seconds) to pull data from a website
             If exceeded, an timeout error is returned. Default is 10 seconds.
         """
-        
+
         self.from_date = from_date
         # if to_date provided, defaults to current date
         if to_date is None:
@@ -47,37 +48,37 @@ class Cryptory():
         self.fillgaps = fillgaps
         self.timeout = timeout
         self._df = pd.DataFrame({'date':pd.date_range(start=self.from_date, end=self.to_date)})
-        
+
     def extract_reddit_metrics(self, subreddit, metric, col_label="", sub_col=False):
         """Retrieve daily subscriber data for a specific subreddit scraped from redditmetrics.com
-        
+
         Parameters
         ----------
         subreddit : the name of subreddit (e.g. "python", "learnpython")
         metric : the particular subscriber information to be retrieved
-            (options are limited to "subscriber-growth" (daily change), 
-            'total-subscribers' (total subscribers on a given day) and 
+            (options are limited to "subscriber-growth" (daily change),
+            'total-subscribers' (total subscribers on a given day) and
             'rankData' (the position of the subreddit on reddit overall)
             'subscriber-growth-perc' (daily percentage change in subscribers))
         col_label : specify the title of the value column
             (it will default to the metric name with hyphens replacing underscores)
         sub_col : whether to include the subreddit name as a column
             (default is False i.e. the column is not included)
-            
+
         Returns
         -------
         pandas Dataframe
         """
         if metric not in ['subscriber-growth', 'total-subscribers', 'rankData', 'subscriber-growth-perc']:
             raise ValueError(
-                "Invalid metric: must be one of 'subscriber-growth', " + 
+                "Invalid metric: must be one of 'subscriber-growth', " +
                 "'total-subscribers', 'subscriber-growth-perc', 'rankData'")
         url = "http://redditmetrics.com/r/" + subreddit
         if metric == 'subscriber-growth-perc':
             metric_name = 'total-subscribers'
         else:
             metric_name = metric
-        
+
         parsed_page = self.fetch_url(url)
 
         if metric == 'rankData':
@@ -107,16 +108,16 @@ class Cryptory():
         else:
             output = output.rename(columns={'subscriber_count': metric.replace("-","_")})
         return output
-        
+
     def extract_coinmarketcap(self, coin=None, symbol=None, coin_col=False):
         """Retrieve basic historical information for a specific cryptocurrency from coinmarketcap.com
-        
+
         Parameters
         ----------
         coin : the name of the cryptocurrency (e.g. 'bitcoin', 'ethereum', 'dentacoin')
         coin_col : whether to include the coin name as a column
             (default is False i.e. the column is not included)
-            
+
         Returns
         -------
         pandas Dataframe
@@ -172,7 +173,7 @@ class Cryptory():
 
     def extract_bitinfocharts(self, coin, metric="price", coin_col=False, metric_col=False):
         """Retrieve historical data for a specific cyrptocurrency scraped from bitinfocharts.com
-        
+
         Parameters
         ----------
         coin : the code of the cryptocurrency (e.g. 'btc' for bitcoin)
@@ -184,16 +185,16 @@ class Cryptory():
             (default is False i.e. the column is not included)
         metric_col : whether to include the metric name as a column
             (default is False i.e. the column is not included)
-            
+
         Returns
         -------
         pandas Dataframe
         """
-        if coin not in ['btc', 'eth', 'xrp', 'bch', 'ltc', 'dash', 'xmr', 'btg', 'etc', 'zec', 
+        if coin not in ['btc', 'eth', 'xrp', 'bch', 'ltc', 'dash', 'xmr', 'btg', 'etc', 'zec',
                         'doge', 'rdd', 'vtc', 'ppc', 'ftc', 'nmc', 'blk', 'aur', 'nvc', 'qrk', 'nec']:
             raise ValueError("Not a valid coin")
-        if metric not in ['transactions', 'size', 'sentbyaddress', 'difficulty', 'hashrate', 'price', 
-                          'mining_profitability', 'sentinusd', 'transactionfees', 'median_transaction_fee', 
+        if metric not in ['transactions', 'size', 'sentbyaddress', 'difficulty', 'hashrate', 'price',
+                          'mining_profitability', 'sentinusd', 'transactionfees', 'median_transaction_fee',
                         'confirmationtime', 'marketcap', 'transactionvalue', 'mediantransactionvalue',
                          'tweets', 'activeaddresses', 'top100cap']:
             raise ValueError("Not a valid bitinfocharts metric")
@@ -230,13 +231,13 @@ class Cryptory():
         if metric_col:
             output['metric'] = metric
         return output.sort_values(by='date', ascending=self.ascending).reset_index(drop=True)
-    
+
     def extract_poloniex(self, coin1, coin2, coin1_col=False, coin2_col=False):
         """Retrieve the historical price of one coin relative to another (currency pair) from poloniex
-        
+
         Parameters
         ----------
-        coin1 : the code of the denomination cryptocurrency 
+        coin1 : the code of the denomination cryptocurrency
             (e.g. 'btc' for prices in bitcoin)
         coin2 : the code for the coin for which prices are retrieved
             (e.g. 'eth' for ethereum)
@@ -244,12 +245,12 @@ class Cryptory():
             (default is False i.e. the column is not included)
         coin2_col : whether to include the coin2 code as a column
             (default is False i.e. the column is not included)
-            
+
         Returns
         -------
         pandas Dataframe
         """
-            
+
         from_date = int(time.mktime(time.strptime(self.from_date, "%Y-%m-%d")))
         to_date = int(time.mktime(time.strptime(self.to_date, "%Y-%m-%d")))
         url = "https://poloniex.com/public?command=returnChartData&currencyPair={}_{}&start={}&end={}&period=86400".format(
@@ -265,7 +266,7 @@ class Cryptory():
                 raise ValueError("The content of the page was not as it should be")
         output = pd.DataFrame(output)
         # more intuitive column order
-        output = output[['date', 'close', 'open', 'high', 'low', 
+        output = output[['date', 'close', 'open', 'high', 'low',
                         'weightedAverage', 'quoteVolume', 'volume']]
         output['date'] = pd.to_datetime(output['date'], unit='s')
         output = output.sort_values(by='date', ascending=self.ascending).reset_index(drop=True)
@@ -274,11 +275,11 @@ class Cryptory():
         if coin2_col:
             output['coin2'] = coin2
         return output
-    
-    def get_exchange_rates(self, from_currency="USD", to_currency="EUR", 
+
+    def get_exchange_rates(self, from_currency="USD", to_currency="EUR",
                                  from_col=False, to_col=False):
         """Retrieve the historical exchange rate between two (fiat) currencies
-        
+
         Parameters
         ----------
         from_currency : the from currency or the currency of denomination (e.g. 'USD')
@@ -287,12 +288,12 @@ class Cryptory():
             (default is False i.e. the column is not included)
         to_col : whether to include the to_currency code as a column
             (default is False i.e. the column is not included)
-            
+
         Returns
         -------
         pandas Dataframe
         """
-        n_days = (datetime.date.today() - 
+        n_days = (datetime.date.today() -
                   datetime.datetime.strptime(self.from_date, "%Y-%m-%d").date()).days + 1
         url = "https://www.indexmundi.com/xrates/graph.aspx?c1={}&c2={}&days={}".format(
             from_currency,
@@ -326,21 +327,21 @@ class Cryptory():
             output['to_currency'] = to_currency
         output = self._merge_fill_filter(output)
         return output
-    
+
     def get_stock_prices(self, market, market_name=None):
         """Retrieve the historical price (or value) of a publically listed stock or index
-        
+
         Parameters
         ----------
         market : the code of the stock or index (see yahoo finance for examples)
             ('%5EDJI' refers to the Dow Jones and '%5EIXIC' pulls the Nasdaq index)
         market_name : specify an appropriate market name or label (under the market_name column)
             the default is None (default is None i.e. the column is not included)
-            
+
         Returns
         -------
         pandas Dataframe
-        
+
         Notes
         -----
         This method scrapes data from yahoo finance, so it only works when the historical
@@ -375,17 +376,17 @@ class Cryptory():
             output['market_name'] = market_name
         output = self._merge_fill_filter(output)
         return output
-    
+
     def get_oil_prices(self):
         """Retrieve the historical oil price (London Brent crude)
-        
+
         Parameters
         ----------
-            
+
         Returns
         -------
         pandas Dataframe
-        
+
         Notes
         -----
         This site seems to take significantly longer than the others to scrape
@@ -396,11 +397,11 @@ class Cryptory():
         souped_page = BeautifulSoup(parsed_page, 'html.parser')
         souped_values = [soups.text for soups in souped_page.findAll("td", {"class": "B3"})]
         souped_dates = [datetime.datetime.strptime(
-                re.sub('\xa0\xa0| to .*','', soups.text), '%Y %b-%d') 
+                re.sub('\xa0\xa0| to .*','', soups.text), '%Y %b-%d')
                         for soups in souped_page.findAll("td", {"class": "B6"})]
         output = []
         for i in range(5):
-            output.append(pd.DataFrame({"date":[date + datetime.timedelta(days=i) 
+            output.append(pd.DataFrame({"date":[date + datetime.timedelta(days=i)
                                                 for date in souped_dates],
                            "oil_price":souped_values[i::5]}))
         output = pd.concat(output)
@@ -408,18 +409,18 @@ class Cryptory():
         output['oil_price'] = pd.to_numeric(output['oil_price'])
         output = self._merge_fill_filter(output)
         return output
-    
+
     def get_metal_prices(self):
         """Retrieve the historical price of gold, silver, platinum and palladium
-        
+
         Parameters
         ----------
-            
+
         Returns
         -------
         pandas Dataframe
         """
-            
+
         current_year = datetime.datetime.now().year
         from_year = datetime.datetime.strptime(self.from_date, "%Y-%m-%d").year
         to_year = datetime.datetime.strptime(self.to_date, "%Y-%m-%d").year
@@ -433,7 +434,7 @@ class Cryptory():
                 output.append(pd.read_html("http://www.kitco.com/londonfix/gold.londonfix"+
                                        str(i)[-2:]+".html")[-1])
         output = pd.concat(output).dropna()
-        output.columns = ['date', 'gold_am', 'gold_pm','silver', 'platinum_am', 
+        output.columns = ['date', 'gold_am', 'gold_pm','silver', 'platinum_am',
                           'platinum_pm', 'palladium_am', 'palladium_pm']
         output = output.assign(date=pd.to_datetime(output['date']))
         for col in output.select_dtypes(include=['object']):
@@ -445,19 +446,19 @@ class Cryptory():
                                          'palladium_am', 'palladium_pm'],
                                        ['gold_pm', 'gold_am', 'platinum_pm', 'platinum_am',
                                          'palladium_pm', 'palladium_am']):
-                output.loc[output[old_val].isnull(), old_val]= output.loc[output[old_val].isnull(), 
+                output.loc[output[old_val].isnull(), old_val]= output.loc[output[old_val].isnull(),
                                                                           new_val]
             output = output.fillna(method='ffill')
         output = output.sort_values(by='date', ascending=self.ascending).reset_index(drop=True)
         output = output[(output['date']>=self.from_date) & (output['date']<=self.to_date)]
         return output
-    
-    def get_google_trends(self, kw_list, trdays=250, overlap=100, 
+
+    def get_google_trends(self, kw_list, trdays=250, overlap=100,
                           cat=0, geo='', tz=360, gprop='', hl='en-US',
-                          sleeptime=1, isPartial_col=False, 
+                          sleeptime=1, isPartial_col=False,
                           from_start=False, scale_cols=True):
         """Retrieve daily google trends data for a list of search terms
-        
+
         Parameters
         ----------
         kw_list : list of search terms (max 5)- see pyTrends for more details
@@ -465,7 +466,7 @@ class Cryptory():
             (the max is around 270, though the website seems to indicate 90)
         overlap : the number of overlapped days when stitching two searches together
         cat : category to narrow results - see pyTrends for more details
-        geo : two letter country abbreviation (e.g 'US', 'UK') 
+        geo : two letter country abbreviation (e.g 'US', 'UK')
             default is '', which returns global results - see pyTrends for more details
         tz : timezone offset
             (default is 360, which corresponds to US CST - see pyTrends for more details)
@@ -474,7 +475,7 @@ class Cryptory():
             default is '', which refers to web searches - see pyTrends for more details
         hl : language (e.g. 'en-US' (default), 'es') - see pyTrends for more details
         sleeptime : when stiching multiple searches, this sets the period between each
-        isPartial_col : remove the isPartial column 
+        isPartial_col : remove the isPartial column
             (default is True i.e. column is removed)
         from_start : when stitching multiple results, this determines whether searches
             are combined going forward or backwards in time
@@ -482,11 +483,11 @@ class Cryptory():
         scale_cols : google trend searches traditionally returns scores between 0 and 100
             stitching could produce values greater than 100
             by setting this to True (default), the values will range between 0 and 100
-        
+
         Returns
         -------
         pandas Dataframe
-        
+
         Notes
         -----
         This method is essentially a highly restricted wrapper for the pytrends package
@@ -494,7 +495,7 @@ class Cryptory():
         by consulting the pytrends github page
         https://github.com/GeneralMills/pytrends
         """
-        
+
         if len(kw_list)>5 or len(kw_list)==0:
             raise ValueError("The keyword list can contain at most 5 words")
         if trdays>270:
@@ -513,13 +514,13 @@ class Cryptory():
         else:
             trend_dates = ['{} {}'.format(
             (to_date - datetime.timedelta(i+trdays)).strftime("%Y-%m-%d"),
-            (to_date - datetime.timedelta(i)).strftime("%Y-%m-%d")) 
+            (to_date - datetime.timedelta(i)).strftime("%Y-%m-%d"))
                            for i in range(0,n_days-trdays+stich_overlap,
                                           stich_overlap)]
         if from_start:
             trend_dates = trend_dates[::-1]
         try:
-            _pytrends.build_payload(kw_list, cat=cat, timeframe=trend_dates[0], 
+            _pytrends.build_payload(kw_list, cat=cat, timeframe=trend_dates[0],
                                    geo=geo, gprop=gprop)
         except:
             raise
@@ -529,7 +530,7 @@ class Cryptory():
         for date in trend_dates[1:]:
             time.sleep(sleeptime)
             try:
-                _pytrends.build_payload(kw_list, cat=cat, timeframe=date, 
+                _pytrends.build_payload(kw_list, cat=cat, timeframe=date,
                                          geo=geo, gprop=gprop)
             except:
                 raise
@@ -543,10 +544,10 @@ class Cryptory():
             temp_trend =  temp_trend[temp_trend.isnull().any(axis=1)]
             temp_trend['isPartial'] = temp_trend['isPartial_x']
             output = pd.concat([output, temp_trend[['date', 'isPartial'] + kw_list]], axis=0, sort=False)
-        
+
         # reorder columns in alphabetical order
         output = output[['date', 'isPartial']+kw_list]
-        
+
         if not isPartial_col:
             output = output.drop('isPartial', axis=1)
         output = output[output['date']>=self.from_date]
@@ -581,7 +582,7 @@ class Cryptory():
 
         except ValueError:
             raise Exception("Response from URL {} was malformed. Response was:\n{}".format(url, response))
-    
+
     def _merge_fill_filter(self, other_df):
         output = pd.merge(self._df, other_df, on="date", how="left")
         output = output.sort_values(by='date', ascending=self.ascending).reset_index(drop=True)
